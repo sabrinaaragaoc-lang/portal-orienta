@@ -1,0 +1,30 @@
+name: Verificar portal
+
+# Confere todo dia (08:00 em Brasilia) se o portal e o banco estao respondendo.
+# Se algo falhar, o GitHub envia e-mail de execucao com falha.
+on:
+  schedule:
+    - cron: "0 11 * * *"
+  workflow_dispatch:
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Portal esta no ar
+        run: |
+          curl -s --max-time 30 -o pagina.html -w "%{http_code}" "https://portal-orienta.orienta-gestao.workers.dev/" > status.txt
+          STATUS=$(cat status.txt)
+          echo "Portal respondeu: $STATUS"
+          if [ "$STATUS" != "200" ]; then echo "Portal fora do ar"; exit 1; fi
+          if ! grep -q "Orienta" pagina.html; then echo "Pagina sem o conteudo esperado"; exit 1; fi
+      - name: Banco de dados responde
+        run: |
+          KEY=$(grep -oE 'sb_publishable_[A-Za-z0-9_-]+' index.html | head -n 1)
+          if [ -z "$KEY" ]; then echo "Chave publica nao encontrada em index.html"; exit 1; fi
+          STATUS=$(curl -s --max-time 30 -o /dev/null -w "%{http_code}" \
+            "https://ebmlltidgpnzpnozxpfv.supabase.co/rest/v1/config?select=*&limit=1" \
+            -H "apikey: $KEY" -H "Authorization: Bearer $KEY")
+          echo "Supabase respondeu: $STATUS"
+          if [ "$STATUS" != "200" ]; then echo "Banco de dados com problema"; exit 1; fi
