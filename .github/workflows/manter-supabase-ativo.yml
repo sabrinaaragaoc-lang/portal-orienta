@@ -1,0 +1,23 @@
+name: Manter Supabase ativo
+
+# Evita que o projeto Supabase gratuito seja pausado por falta de uso.
+# Roda toda segunda e quinta-feira (09:00 UTC) e pode ser disparado manualmente.
+on:
+  schedule:
+    - cron: "0 9 * * 1,4"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Consulta leve ao banco
+        run: |
+          KEY=$(grep -oE 'sb_publishable_[A-Za-z0-9_-]+' index.html | head -n 1)
+          if [ -z "$KEY" ]; then echo "Chave publica nao encontrada em index.html"; exit 1; fi
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            "https://ebmlltidgpnzpnozxpfv.supabase.co/rest/v1/config?select=*&limit=1" \
+            -H "apikey: $KEY" -H "Authorization: Bearer $KEY")
+          echo "Resposta do Supabase: $STATUS"
+          if [ "$STATUS" -ge 500 ] || [ "$STATUS" -eq 000 ]; then exit 1; fi
